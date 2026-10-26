@@ -1,70 +1,106 @@
-# DerpMeter (macOS)
+<p align="center"><img src="Resources/DerpMeter.png" width="96" alt="DerpMeter logo"></p>
 
-Menu bar app (AppKit `NSStatusItem` + SwiftUI panel, macOS 14+). It shows the selected agent's 24h Derp Score and lets you vote Smart / Meh / Dumb in one click. It uses the same `/api/index`, `/api/models` and `/api/votes` contract as the `derp` CLI.
+# DerpMeter for macOS
 
-## Derp Smash (optional desktop CRT)
+**How derpy is your AI today?** A menu bar app that shows the community's 24h [Derp Score](https://derpmeter.com) for your coding agent and lets you vote Smart / Meh / Dumb in one click. Optionally, smash a retro CRT on your desktop when the agent lets you down.
 
-A small retro CRT on your desktop that you can smash with a hammer or a baseball bat. **Off by default.**
+Agents: Claude Code, Codex and Antigravity. macOS 14+, Apple Silicon and Intel. MIT licensed.
 
-- **Enable:** Settings → Derp Smash → _Enable Derp Smash_, or the panel's `…` menu → _Derp Smash desktop CRT_. Settings also pick the weapon, the size (Small by default, Medium, Large; the vote prompt stays readable), mute impact sounds, and _Keep above other windows_ (off: the CRT sits just above the desktop icons, so app windows cover it).
-- **Use:** click to smash, drag to move (the spot is remembered per display and kept on screen), right-click for _Change Weapon_, _Repair CRT_, _Change Agent_, _Size_, _Mute Sounds_, _Keep Above Windows_, _Hide Derp Smash_, _Open DerpMeter_.
-- **Damage:** 1–2 hits light, 3–4 heavy, 5 broken. At 5 hits an optional _Smart / Meh / Dumb_ prompt appears. Nothing is preselected; _Not now_ closes it and the CRT stays broken; _Repair_ resets it without voting.
-- **Votes:** only a button you press in the prompt is a vote. It goes through the same queue, token and cooldown as the panel (per agent and model; the countdown shows while you wait). Paused or offline votes are queued as usual. Hits are counted only on this Mac and never sent or added to the Derp Score.
-- **Disable:** _Hide Derp Smash_ or the Settings toggle closes the window and releases it.
-- **Resources:** no timers or polling; animations run only briefly after a hit or during a repair (respecting Reduce Motion). The app opts out of App Nap for about 1.5 s after an interaction so the animation is smooth, then idles. No Accessibility, Screen Recording or Input Monitoring permission; the window never takes keyboard focus and is not shown over full-screen apps or the lock screen.
-- **QA:** `.build/debug/DerpMeterCompanion --render-smash <dir>` renders each state to PNG offscreen (own views only).
-
-## Beta download
-
-`npm run companion:pack` builds a universal (Apple Silicon + Intel) app and, for notarized releases, requires Developer ID signing plus a Keychain notarization profile (see below). It writes `public/downloads/DerpMeter-<version>-beta-macOS-notarized.zip`; `/apps` links it with its SHA-256. Bump `release.json` and notarize each new beta.
-
-## Build and run
+## Install
 
 ```sh
-cd packages/companion
-swift test                 # DerpCore: vote contract, offline queue, mascot, local integration, API client
-swift run                  # run unbundled (notifications and launch-at-login unavailable)
-./scripts/bundle.sh        # build "build/DerpMeter.app" (ad-hoc signed, LSUIElement)
-open "build/DerpMeter.app"
+brew install --cask derpmeter/derpmeter/derpmeter
 ```
 
-For UI inspection, `build/DerpMeter.app/Contents/MacOS/DerpMeterCompanion --open-panel` opens the actual menu bar popover anchored to its status icon, with real data. Add `--capture-panel /absolute/existing/directory` to render only the app’s own panel and status button into PNG QA artifacts (no desktop capture or screen recording access). Normal launches wait for a click.
+Or download the notarized beta from [derpmeter.com/apps](https://derpmeter.com/apps). It is Developer ID signed and notarized by Apple, so it opens normally.
 
-## Setup
-
-1. The server must list `menu-bar` in `VOTE_CHANNELS`. Without that, votes are rejected with "channel not enabled".
-2. Nothing to configure: derpmeter.com is built in and not shown in the app. (Development only: `defaults write com.derpmeter.companion endpoint <origin>`; `defaults delete com.derpmeter.companion endpoint` restores it.) The first vote gets a Menu Bar token automatically and stores it only in the login Keychain (this device, after first unlock). An expired or revoked token is replaced once, automatically. You can also paste your own `dm_menubar_…` token.
+There is nothing to set up. The first vote gets a random menu bar token automatically (no email or account) and keeps it only in your login Keychain.
 
 ## Features
 
-- Menu bar uses the CLI statusline mood format without a model: `(•‿•) · Derp 20`, `(•_•) · Derp 50`, `(⊙_☉) · Derp 80`. Thresholds match statusline: Smart <35 / green, Meh 35–<65 / yellow, Dumb ≥65 / red. Native adaptive colors match ANSI's semantic colors; exact terminal RGB varies by terminal theme. Red has brighter dark-appearance and darker light-appearance variants, and semibold text improves small-size legibility. Missing data shows `(·_·) · Derp —`. Low sample (<30), cached/offline and paused details remain in the tooltip and panel. The status item reserves a fixed width for the widest face and a three-digit score; left alignment keeps the face anchored when agents or scores change. Identical titles are not redrawn.
-- Website-aligned dark panel: approved lavender raster logo, locally bundled Geist typography, provider marks, three visible agent scores, a sentiment scale and independent Smart / Meh / Dumb vote controls. The score is community sentiment, not a capability benchmark. Explicit low-sample and demo labels remain visible. Reason and queue controls expand inline; footer links to the dashboard and settings. The optional mascot setting still shows a small independent meter illustration.
-- Model step (02): **Auto** uses the detected model, **No model**, or any current catalog model; the choice is remembered per agent and the cooldown countdown follows it. With "Detect the model" on (off by default) Auto reads each agent's own setting: `model` in `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR`), `model` in `~/.codex/config.toml`, `model.name` in `~/.gemini/settings.json`. Exact ids win (`[1m]`/date suffixes ignored); Claude aliases (`opus`, `sonnet`, `haiku`, `fable`, `opusplan`) map to the single current catalog model of that family. Without a `model` key the agent uses its account default, which no file records, so pick one. Optional, nested: the live Claude Code session model from the DerpMeter statusline (`derp privacy session on`), which wins when fresh and marks votes session-linked. Antigravity's Claude/GPT models have DerpMeter-only `agy-*` ids, so they are picked manually.
-- Keychain reads do not prompt or block startup. An inaccessible existing token is preserved; voting shows an access notice instead of replacing it.
-- One-click votes with an optional failure reason. Global shortcuts ⌥⌘1 / ⌥⌘2 / ⌥⌘3 use Carbon hot keys, which need **no Accessibility or Input Monitoring permission**. They are off by default.
-- **Offline queue** (max 20 votes, 24h lifetime). It retries with the same body and key, backing off from 30s up to a 1h cap. It stops on 401, 409 and 429 and never retries those automatically. You can inspect and discard pending items. A vote is never sent to an origin other than the one it was queued for, and redirects are refused.
-- **Undo last vote** cancels your own vote within 24h. The agent's cooldown still applies.
-- **Cooldown countdown**: shows "Next vote in 37 min" for the selected agent (from `GET /api/votes/status`) and disables the buttons until then.
-- Index cache in `~/Library/Application Support/DerpMeter/` (0600). Refreshes every 5 minutes. Shows cache age when offline.
-- **Active session (explicit local integration, opt-in twice).** With `derp privacy session on` in the CLI and "Use local session observations" here, the app reads only `~/.derpmeter/observed.json` (agent, model, time). It shows the active agent and model, and votes for that agent carry `sessionLinked` plus a catalog-listed model. No process scanning, transcripts, screen access or broad file access.
-- Notifications (vote results; Derp Score jump of 10+ points with 30+ votes) and launch at login work in the bundled app only.
-- Privacy controls: pause (no network, votes stay queued) and clear local state. Clearing does not delete votes the server already accepted.
+- **Score in the menu bar** in the same mood format as the CLI statusline: `(•‿•) · Derp 20`, `(•_•) · Derp 50`, `(⊙_☉) · Derp 80`. Smart is below 35 (green), Meh 35–64 (yellow), Dumb 65+ (red). Low samples, cached or offline data and pause show in the tooltip and panel.
+- **Panel:** the three agents' scores, a sentiment scale and Smart / Meh / Dumb buttons, with an optional failure reason. The score is community sentiment, not a capability benchmark.
+- **Model choice:** _Auto_ (the detected model), _No model_, or any current catalog model. The choice is remembered per agent and the cooldown follows it.
+- **Cooldown countdown:** "Next vote in 37 min" for the selected agent and model; the buttons stay disabled until then.
+- **Undo last vote** within 24h (the cooldown still applies).
+- **Offline queue:** up to 20 votes for 24h. Each retry sends the same body and key, backing off from 30 s to 1 h. It stops on 401, 409 and 429, never follows redirects and never sends a vote to another server. You can inspect and discard queued votes.
+- **Global shortcuts** ⌥⌘1 / ⌥⌘2 / ⌥⌘3 (off by default). They use Carbon hot keys, so no Accessibility or Input Monitoring permission is needed.
+- **Notifications** for vote results and for a Derp Score jump of 10+ points with 30+ votes. **Launch at login.**
+- **Privacy controls:** pause (no network; votes stay queued) and clear local state. Clearing does not delete votes the server already accepted.
 
-## Signing and notarization
+### Derp Smash (optional desktop CRT)
 
-Beta 0.1.4 is Developer ID signed, Apple notarized and stapled (2026-10-22). The universal download supports Apple Silicon and Intel. Open normally; no Gatekeeper override is needed.
+A small retro CRT on your desktop that you can smash with a hammer or a baseball bat. **Off by default.**
 
-To reproduce a notarized release, use a valid Developer ID Application identity and an existing notarytool Keychain profile. No credentials belong in the repo:
+- **Turn on:** Settings → Derp Smash, or the panel's `…` menu → _Derp Smash desktop CRT_. Settings also choose the weapon, the size, sound and _Keep above other windows_ (off: the CRT sits just above the desktop icons).
+- **Use:** click to smash, drag to move (the spot is remembered per display). Right-click for weapon, repair, agent, size, sound and hide.
+- **Damage:** 1–2 hits light, 3–4 heavy, 5 broken. A broken CRT offers an optional _Smart / Meh / Dumb_ prompt with nothing preselected. _Not now_ leaves it broken; _Repair_ resets it.
+- **Votes:** only a button you press in the prompt is a vote, sent through the same queue, token and cooldown as the panel. Hits are not votes and never count toward the Derp Score.
+- **Light on resources:** no polling; animations run only briefly after a hit or a repair and respect Reduce Motion. The window never takes keyboard focus, needs no special permission and is not shown over full-screen apps or the lock screen.
+
+## What it reads on your Mac
+
+Nothing beyond what you turn on:
+
+| Setting                                                                                                                                          | Reads                                                                                                                                                                              |
+| ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Always                                                                                                                                           | Its own cache in `~/Library/Application Support/DerpMeter/` (0600, refreshed every 5 min) and its Keychain item                                                                    |
+| _Detect the model_ (off by default)                                                                                                              | Only the model setting of each agent: `model` in `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR`), `model` in `~/.codex/config.toml`, `model.name` in `~/.gemini/settings.json` |
+| _Use local session observations_ (off by default; also needs `derp privacy session on` in the [CLI](https://github.com/derpmeter/derpmeter-cli)) | Only `~/.derpmeter/observed.json` (agent, model, time). That live Claude Code model wins while fresh, and votes are marked session-linked                                          |
+
+Model detection details:
+
+- Exact ids win, and `[1m]` or date suffixes are ignored.
+- Claude aliases (`opus`, `sonnet`, `haiku`, `fable`, `opusplan`) map to the current catalog model of that family.
+- Without a `model` key, the agent uses its account default, which no file records, so pick a model yourself.
+- Antigravity's Claude and GPT models have DerpMeter-only `agy-*` ids, so pick them manually.
+
+There is no process scanning, no transcript or screen access and no broad file access. Keychain reads never prompt or block startup. If an existing token can't be read, it is kept and the panel shows a notice instead of replacing it.
+
+## Build from source
+
+```sh
+swift test                 # DerpCore: vote contract, offline queue, mascot, local integration, API client
+swift run                  # run unbundled (notifications and launch at login unavailable)
+./scripts/bundle.sh        # build build/DerpMeter.app (ad-hoc signed, hardened runtime)
+open build/DerpMeter.app
+```
+
+Requires Xcode 15.3+ (Swift 5.10+). No additional entitlements are needed.
+
+QA helpers (own views only, no screen recording):
+
+- `build/DerpMeter.app/Contents/MacOS/DerpMeterCompanion --open-panel` opens the real popover anchored to the status icon.
+- `--capture-panel <existing dir>` renders the panel and status button to PNG.
+- `.build/debug/DerpMeterCompanion --render-smash <dir>` renders each Derp Smash state to PNG.
+
+Development server: `defaults write com.derpmeter.companion endpoint <origin>`. Run `defaults delete com.derpmeter.companion endpoint` to go back to derpmeter.com.
+
+### Signed release
+
+A notarized build needs a Developer ID Application identity and an existing `notarytool` Keychain profile. No credentials belong in the repository:
 
 ```sh
 SIGN_IDENTITY="Developer ID Application: <Name> (<TEAMID>)" \
-NOTARY_PROFILE="<existing-keychain-profile>" npm run companion:pack
+NOTARY_PROFILE="<keychain-profile>" ./scripts/pack.sh
 ```
 
-For releases marked `notarized` in `release.json`, packing fails before rebuilding if signing or notarization configuration is absent. The pack script builds universal, signs with hardened runtime, submits to Apple, staples the ticket, verifies Gatekeeper acceptance and only then replaces the downloadable ZIP. A distinct `-notarized.zip` URL avoids stale pre-notarization downloads. Each new binary needs fresh notarization; do not re-sign or alter a stapled bundle.
-
-Local development: `./scripts/bundle.sh` remains ad-hoc signed by default. Hardened runtime is enabled. No additional entitlements are required.
+`pack.sh` builds a universal app, signs it with hardened runtime, submits it to Apple, staples the ticket, checks Gatekeeper and only then writes the zip. For a release marked `notarized` in `release.json`, it fails before building if signing is not configured. It writes to the website's downloads folder in the monorepo; in this mirror, take the zip from `build/`.
 
 ## Uninstall
 
-Quit the app, delete it, then optionally remove `~/Library/Application Support/DerpMeter`, the `com.derpmeter.companion` Keychain item and `defaults delete com.derpmeter.companion`. Ask the operator to revoke the Menu Bar credential.
+```sh
+brew uninstall --cask derpmeter   # or quit the app and delete it
+rm -rf ~/Library/Application\ Support/DerpMeter
+defaults delete com.derpmeter.companion
+```
+
+Then delete the `com.derpmeter.companion` item in Keychain Access.
+
+## Source
+
+This repository is a read-only mirror of the menu bar app in the DerpMeter monorepo, updated on each release ([derpmeter/derpmeter-menubar](https://github.com/derpmeter/derpmeter-menubar)). Issues are welcome. Pull requests are applied upstream (with credit) and arrive with the next release. Related: [CLI, statusline and MCP server](https://github.com/derpmeter/derpmeter-cli).
+
+Bundled assets keep their own licenses (see [`Resources/README.md`](Resources/README.md)). Provider logos are trademarks of their owners.
+
+MIT © DerpMeter
