@@ -52,6 +52,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var queue = OfflineQueue()
     @Published private(set) var session: ObservedSession?
     @Published private(set) var configuredModels: [Agent: String] = [:]
+    @Published private(set) var configuredEffort: String?
+    /// Claude Code is in use right now (opt-in observation only); the Derp
+    /// Smash CRT plays scrolling output while it is.
+    @Published private(set) var claudeActive = false
     @Published var status: String?
     @Published var hasToken = false
     @Published private(set) var tokenAccessPending = false
@@ -214,6 +218,22 @@ final class AppModel: ObservableObject {
             for agent in Agent.allCases { configured[agent] = LocalModelSettings.configuredModel(for: agent) }
         }
         if configured != configuredModels { configuredModels = configured }
+        let effort = detectConfiguredModels ? LocalModelSettings.configuredClaudeEffort() : nil
+        if effort != configuredEffort { configuredEffort = effort }
+    }
+
+    func refreshClaudeActivity() {
+        let active = useLocalSession
+            && LocalIntegration.claudeCodeActive(data: try? Data(contentsOf: LocalIntegration.observationFile()), now: Date())
+        if active != claudeActive { claudeActive = active }
+    }
+
+    /// Claude Code effort, detected like the model: the opt-in session
+    /// observation when it supplied the model, else the configured default.
+    func detectedEffort(for agent: Agent) -> String? {
+        guard agent == .claudeCode, let detected = detectedModel(for: agent) else { return nil }
+        if detected.source == .session { return session?.effort ?? configuredEffort }
+        return configuredEffort
     }
 
     /// One-click vote: queued first, then sent; retries reuse the same key.
@@ -400,8 +420,20 @@ final class AppModel: ObservableObject {
     }
 }
 
-/// Derp Smash votes reuse the normal queue, flush and cooldown; nothing new is sent.
+/// Derp Smash votes reuse the normal queue, flush and cooldown.
 extension AppModel: SmashVoter {
+    /// A CRT broke: count it with the current agent, model and effort. Only
+    /// with an existing token and not paused; failures are dropped silently.
+    func recordSmash() {
+        guard !paused, let client else { return }
+        reloadSession()
+        let body = SmashBody(agent: agent, model: voteModel(for: agent), effort: detectedEffort(for: agent))
+        Task.detached {
+            guard let token = TokenStore.read() else { return }
+            _ = await client.reportSmash(body, token: token)
+        }
+    }
+
     func smashNextVoteAt() -> Date? { availableAt(agent) }
 
     func submitSmashVote(_ rating: Rating) async -> SmashVoteResult {

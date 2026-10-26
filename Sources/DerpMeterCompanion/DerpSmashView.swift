@@ -46,7 +46,8 @@ struct DerpSmashView: View {
     }
 
     private var crt: some View {
-        CRTMonitor(agent: model.agent, modelName: model.voteModelName, machine: machine,
+        CRTMonitor(agent: model.agent, modelName: model.voteModelName, machine: machine, working: model.claudeActive,
+                   workingCaption: t.smashClaudeWorking,
                    caption: t.smashCaption(machine), feedback: machine.state == .repairing ? controller.feedback : nil, reduceMotion: reduceMotion)
             .keyframeAnimator(initialValue: Shake(), trigger: trigger) { content, value in
                 content.offset(x: value.x, y: value.y).rotationEffect(.degrees(value.tilt))
@@ -143,6 +144,9 @@ private struct CRTMonitor: View {
     let agent: Agent
     let modelName: String?
     let machine: SmashMachine
+    /// Claude Code is running: output scrolls up the screen until it breaks.
+    let working: Bool
+    let workingCaption: String
     let caption: String
     let feedback: String?
     let reduceMotion: Bool
@@ -205,9 +209,27 @@ private struct CRTMonitor: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(RadialGradient(colors: [Color(red: 0.06, green: 0.13, blue: 0.10), Color(red: 0.02, green: 0.04, blue: 0.03)],
                                      center: .center, startRadius: 4, endRadius: 100))
-            content.foregroundStyle(tint)
-                .shadow(color: tint.opacity(0.7), radius: 3)
-                .padding(10)
+            if scrolling {
+                ScrollingOutput(paused: reduceMotion).foregroundStyle(tint)
+                    .shadow(color: tint.opacity(0.6), radius: 2)
+                    .padding(.horizontal, 10).padding(.vertical, 8)
+                    .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.25),
+                                                 .init(color: .black, location: 1)], startPoint: .top, endPoint: .bottom))
+                    .overlay(alignment: .bottom) {
+                        Text(state == .idle ? workingCaption : caption)
+                            .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                            .lineLimit(1).minimumScaleFactor(0.7)
+                            .foregroundStyle(tint)
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Color.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 3))
+                            .padding(.bottom, 8)
+                    }
+                    .transition(.opacity)
+            } else {
+                content.foregroundStyle(tint)
+                    .shadow(color: tint.opacity(0.7), radius: 3)
+                    .padding(10)
+            }
             Scanlines().clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             if damage > 0 {
                 Cracks(level: damage).stroke(.white.opacity(0.75), lineWidth: damage == 3 ? 1.3 : 1)
@@ -230,6 +252,12 @@ private struct CRTMonitor: View {
         }
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(.black.opacity(0.6), lineWidth: 3))
         .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: damage)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: scrolling)
+    }
+
+    /// Only while the CRT still works; a broken screen shows its usual face.
+    private var scrolling: Bool {
+        working && [.idle, .lightDamage, .heavyDamage].contains(state)
     }
 
     @ViewBuilder private var content: some View {
@@ -253,6 +281,38 @@ private struct CRTMonitor: View {
                 .multilineTextAlignment(.center).lineLimit(3).minimumScaleFactor(0.8)
                 .padding(.top, 2)
         }
+    }
+}
+
+/// Fake agent output racing up the screen while Claude Code runs. Runs at
+/// 20 fps only while shown; Reduce Motion freezes it.
+private struct ScrollingOutput: View {
+    let paused: Bool
+    private static let lines = [
+        "⏺ Read(src/app/page.tsx)", "  ⎿ 214 lines", "✻ Thinking…", "⏺ Update(src/lib/score.ts)",
+        "  + const derp = vibes()", "  - return smart", "⏺ Bash(npm test)", "  ⎿ ✓ 48 passed",
+        "✻ Overthinking…", "⏺ Search(\"TODO\")", "  ⎿ Found 37 matches", "⏺ Edit(README.md)",
+        "  + it works on my machine", "✻ Reticulating splines…", "⏺ Bash(git status)", "  ⎿ 12 files changed",
+        "⏺ Write(fix-final-v2.ts)", "✻ Pondering…", "  + // trust me", "⏺ Read(package.json)",
+    ]
+    private static let lineHeight: CGFloat = 10
+    private static let speed: CGFloat = 70 // points per second
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 20, paused: paused)) { timeline in
+            Canvas { context, size in
+                let offset = CGFloat(timeline.date.timeIntervalSinceReferenceDate) * Self.speed
+                let first = Int(offset / Self.lineHeight)
+                let shift = offset.truncatingRemainder(dividingBy: Self.lineHeight)
+                let rows = Int(size.height / Self.lineHeight) + 2
+                for row in 0..<rows {
+                    let line = Self.lines[(first + row) % Self.lines.count]
+                    context.draw(Text(line).font(.system(size: 7, design: .monospaced)),
+                                 at: CGPoint(x: 0, y: CGFloat(row) * Self.lineHeight - shift), anchor: .topLeading)
+                }
+            }
+        }
+        .accessibilityHidden(true)
     }
 }
 

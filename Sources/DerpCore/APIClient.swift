@@ -30,6 +30,18 @@ public enum SendOutcome: Equatable, Sendable {
     }
 }
 
+/// One broken Derp Smash CRT: catalog model and Claude Code effort, if known.
+public struct SmashBody: Codable, Equatable, Sendable {
+    public let agent: String
+    public let model: String?
+    public let effort: String?
+    public init(agent: Agent, model: String?, effort: String?) {
+        self.agent = agent.rawValue
+        self.model = model
+        self.effort = agent == .claudeCode ? effort.flatMap { ClaudeEffort.valid($0) } : nil
+    }
+}
+
 public protocol HTTPTransport: Sendable {
     func send(_ request: URLRequest) async throws -> (Data, Int)
 }
@@ -118,6 +130,11 @@ public struct APIClient: Sendable {
 
     public func submit(_ vote: VoteBody, token: String) async -> SendOutcome {
         await perform(request("api/votes", method: "POST", token: token, body: try? JSONEncoder().encode(vote)))
+    }
+
+    /// Derp Smash: count one broken CRT (POST /api/smash). Best effort, never queued.
+    public func reportSmash(_ body: SmashBody, token: String) async -> SendOutcome {
+        await perform(request("api/smash", method: "POST", token: token, body: try? JSONEncoder().encode(body)))
     }
 
     /// Cancel your own vote within 24h (DELETE /api/votes with the receipt key).

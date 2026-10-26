@@ -265,8 +265,8 @@ public struct L10n: Sendable {
     public var sectionDesktop: String { t("Desktop", "데스크톱") }
     public var mascot: String { t("Derpy mascot in the panel", "패널에 Derpy 마스코트 표시") }
     public var smashDetail: String {
-        t("A desktop CRT you can smash. Hits stay on this Mac and never count as votes.",
-          "부술 수 있는 데스크톱 CRT예요. 타격은 이 Mac에만 남고 투표로 세지 않아요.")
+        t("A desktop CRT you can smash. Hits never count as votes; each broken CRT is counted anonymously with the agent, model and effort.",
+          "부술 수 있는 데스크톱 CRT예요. 타격은 투표로 세지 않고, 부서진 CRT 수만 에이전트·모델·effort와 함께 익명으로 집계해요.")
     }
     public var weaponLabel: String { t("Weapon", "무기") }
     public var sizeLabel: String { t("Size", "크기") }
@@ -374,6 +374,7 @@ public struct L10n: Sendable {
     public var smashOfflineQueued: String { t("Offline: vote queued. It retries automatically.", "오프라인: 투표를 대기열에 넣었어요. 자동으로 다시 보내요.") }
     public var smashTokenRejected: String { t("Token rejected. Check Settings.", "토큰이 거부됐어요. 설정을 확인해 주세요.") }
     public var smashNotAccepted: String { t("Vote was not accepted.", "투표가 반영되지 않았어요.") }
+    public var smashClaudeWorking: String { t("Claude Code is cooking…", "Claude Code 작업 중…") }
     public var smashHelp: String { t("Click to smash · drag to move · right-click for options", "클릭해서 부수기 · 드래그해서 이동 · 우클릭으로 옵션") }
     public func smashAccessibility(_ agent: Agent, caption: String) -> String {
         t("Derp Smash CRT showing \(agent.displayName). \(caption)", "\(agent.displayName)을(를) 보여 주는 Derp Smash CRT. \(caption)")

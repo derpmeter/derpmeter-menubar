@@ -151,6 +151,42 @@ final class LocalIntegrationTests: XCTestCase {
         XCTAssertNil(LocalIntegration.recentSession(data: Data("nope".utf8), now: now))
         XCTAssertNil(LocalIntegration.recentSession(data: nil, now: now))
     }
+
+    func testReadsClaudeEffortFromObservationAndSettings() {
+        let fresh = now.addingTimeInterval(-60).timeIntervalSince1970 * 1000
+        let data = try! JSONSerialization.data(withJSONObject: [
+            "claude-code": ["model": "claude-opus-5-5", "effort": "xhigh", "seenAt": fresh],
+        ])
+        XCTAssertEqual(LocalIntegration.recentSession(data: data, now: now)?.effort, "xhigh")
+        let odd = try! JSONSerialization.data(withJSONObject: [
+            "claude-code": ["model": "claude-opus-5-5", "effort": "turbo", "seenAt": fresh],
+        ])
+        XCTAssertNil(LocalIntegration.recentSession(data: odd, now: now)?.effort)
+        XCTAssertEqual(LocalModelSettings.claudeEffort(json: Data(#"{"effortLevel":"max"}"#.utf8)), "max")
+        XCTAssertNil(LocalModelSettings.claudeEffort(json: Data(#"{"effortLevel":"11"}"#.utf8)))
+        XCTAssertEqual(LocalModelSettings.configuredClaudeEffort(environment: ["CLAUDE_CODE_EFFORT_LEVEL": "low", "CLAUDE_CONFIG_DIR": "/nonexistent"]), "low")
+        XCTAssertNil(LocalModelSettings.configuredClaudeEffort(environment: ["CLAUDE_CONFIG_DIR": "/nonexistent"]))
+    }
+
+    func testClaudeCodeIsActiveOnlyRightAfterAStatuslineRefresh() {
+        func at(_ ago: TimeInterval) -> Data {
+            try! JSONSerialization.data(withJSONObject: [
+                "claude-code": ["model": "claude-opus-5-5", "seenAt": now.addingTimeInterval(-ago).timeIntervalSince1970 * 1000],
+            ])
+        }
+        XCTAssertTrue(LocalIntegration.claudeCodeActive(data: at(30), now: now))
+        XCTAssertFalse(LocalIntegration.claudeCodeActive(data: at(180), now: now))
+        XCTAssertFalse(LocalIntegration.claudeCodeActive(data: at(-30), now: now), "future timestamps are ignored")
+        XCTAssertFalse(LocalIntegration.claudeCodeActive(data: nil, now: now))
+    }
+
+    func testSmashBodyKeepsEffortForClaudeCodeOnly() throws {
+        XCTAssertEqual(SmashBody(agent: .claudeCode, model: "claude-opus-5-5", effort: "high").effort, "high")
+        XCTAssertNil(SmashBody(agent: .codex, model: nil, effort: "high").effort)
+        XCTAssertNil(SmashBody(agent: .claudeCode, model: nil, effort: "turbo").effort)
+        let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(SmashBody(agent: .codex, model: nil, effort: nil))) as? [String: Any]
+        XCTAssertEqual(json?.keys.sorted(), ["agent"])
+    }
 }
 
 final class APIClientTests: XCTestCase {

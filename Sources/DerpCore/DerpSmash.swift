@@ -1,9 +1,10 @@
 import CoreGraphics
 import Foundation
 
-// Derp Smash: an optional desktop CRT you can smash. Everything here is local.
-// Hits never reach the network and never affect the Derp Score; only an
-// explicitly chosen Smart / Meh / Dumb vote goes through the normal vote path.
+// Derp Smash: an optional desktop CRT you can smash. Hits stay local and never
+// affect the Derp Score; only an explicitly chosen Smart / Meh / Dumb vote goes
+// through the normal vote path. Each CRT that breaks is counted once (agent,
+// model, Claude Code effort; no hit counts or timing) through `onBroken`.
 
 public enum SmashWeapon: String, CaseIterable, Codable, Sendable, Identifiable {
     case hammer, bat
@@ -178,6 +179,8 @@ public final class SmashController: ObservableObject {
     @Published public private(set) var impacts = 0
 
     public weak var voter: SmashVoter?
+    /// Called once per CRT when it first breaks (the hit that opens the prompt).
+    public var onBroken: (() -> Void)?
     /// Display language for the feedback this controller writes itself.
     public var language: Language = .en
     private let clock: () -> Date
@@ -196,8 +199,10 @@ public final class SmashController: ObservableObject {
         let wasPrompt = machine.promptVisible
         // The cooldown is only read when the prompt is about to open: no polling.
         let opening = !wasPrompt && machine.hits + 1 >= SmashMachine.promptAt && !machine.promptDismissed
+        let before = machine.hits
         guard machine.hit(now: clock(), cooldownUntil: opening ? voter?.smashNextVoteAt() : nil) else { return false }
         impacts &+= 1
+        if before < SmashMachine.promptAt, machine.hits >= SmashMachine.promptAt { onBroken?() }
         if machine.promptVisible, !wasPrompt { feedback = nil; scheduleCooldownEnd() }
         return true
     }

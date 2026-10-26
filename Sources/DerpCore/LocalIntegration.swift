@@ -6,11 +6,25 @@ import Foundation
 public struct ObservedSession: Equatable, Sendable {
     public let agent: Agent
     public let model: String?
+    /// Claude Code effort level from its statusline, when the model has one.
+    public let effort: String?
     public let seenAt: Date
+}
+
+/// Claude Code effort levels (statusline `effort.level`, settings `effortLevel`).
+public enum ClaudeEffort {
+    public static let levels: Set<String> = ["low", "medium", "high", "xhigh", "max"]
+    public static func valid(_ value: Any?) -> String? {
+        guard let value = value as? String, levels.contains(value) else { return nil }
+        return value
+    }
 }
 
 public enum LocalIntegration {
     public static let freshness: TimeInterval = 15 * 60
+    /// The statusline refreshes the observation at most once a minute while
+    /// Claude Code is in use, so two minutes without one means it is idle.
+    public static let activeWindow: TimeInterval = 2 * 60
 
     public static func observationFile(environment: [String: String] = ProcessInfo.processInfo.environment) -> URL {
         let home = environment["DERPMETER_HOME"]
@@ -33,9 +47,19 @@ public enum LocalIntegration {
             guard age >= 0, age < freshness else { continue }
             var model = entry["model"] as? String
             if let m = model, modelPattern.firstMatch(in: m, range: NSRange(m.startIndex..., in: m)) == nil { model = nil }
-            if best == nil || seenAt > best!.seenAt { best = ObservedSession(agent: agent, model: model, seenAt: seenAt) }
+            if best == nil || seenAt > best!.seenAt {
+                best = ObservedSession(agent: agent, model: model, effort: ClaudeEffort.valid(entry["effort"]), seenAt: seenAt)
+            }
         }
         return best
+    }
+
+    /// Claude Code looks busy: its statusline refreshed the observation recently.
+    public static func claudeCodeActive(data: Data?, now: Date) -> Bool {
+        guard let data, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let ms = (json[Agent.claudeCode.rawValue] as? [String: Any])?["seenAt"] as? Double else { return false }
+        let age = now.timeIntervalSince(Date(timeIntervalSince1970: ms / 1000))
+        return age >= 0 && age < activeWindow
     }
 }
 
@@ -79,6 +103,20 @@ public enum LocalModelSettings {
               let value = object["model"] as? String,
               value.range(of: #"^[A-Za-z0-9.\[\]-]{1,80}$"#, options: .regularExpression) != nil else { return nil }
         return value
+    }
+
+    /// Claude Code: `effortLevel` in the same user settings file.
+    public static func claudeEffort(json data: Data) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return ClaudeEffort.valid(object["effortLevel"])
+    }
+
+    /// Claude Code's configured default effort (env var first, as Claude Code does).
+    public static func configuredClaudeEffort(environment: [String: String] = ProcessInfo.processInfo.environment) -> String? {
+        if let level = ClaudeEffort.valid(environment["CLAUDE_CODE_EFFORT_LEVEL"]) { return level }
+        let dir = environment["CLAUDE_CONFIG_DIR"].map { URL(fileURLWithPath: $0) }
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude")
+        return (try? Data(contentsOf: dir.appendingPathComponent("settings.json"))).flatMap { claudeEffort(json: $0) }
     }
 
     /// Maps a configured value to a catalog id for the agent (same rules as the

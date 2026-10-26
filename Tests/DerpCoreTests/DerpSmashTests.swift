@@ -107,6 +107,19 @@ final class SmashControllerTests: XCTestCase {
         XCTAssertEqual(c.impacts, 12)
     }
 
+    func testEachBrokenCRTIsCountedOnce() async {
+        let voter = Voter()
+        let c = make(voter)
+        var broken = 0
+        c.onBroken = { broken += 1 }
+        smash(c, times: 12)
+        XCTAssertEqual(broken, 1, "more hits on a broken CRT are not new breaks")
+        c.repair()
+        await c.waitForRepair()
+        smash(c, times: 5)
+        XCTAssertEqual(broken, 2)
+    }
+
     func testVoteSuccessRepairs() async {
         let voter = Voter()
         let c = make(voter)

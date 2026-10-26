@@ -36,7 +36,9 @@ A small retro CRT on your desktop that you can smash with a hammer or a baseball
 - **Use:** click to smash, drag to move (the spot is remembered per display). Right-click for weapon, repair, agent, size, sound and hide.
 - **Damage:** 1–2 hits light, 3–4 heavy, 5 broken. A broken CRT offers an optional _Smart / Meh / Dumb_ prompt with nothing preselected. _Not now_ leaves it broken; _Repair_ resets it.
 - **Votes:** only a button you press in the prompt is a vote, sent through the same queue, token and cooldown as the panel. Hits are not votes and never count toward the Derp Score.
-- **Light on resources:** no polling; animations run only briefly after a hit or a repair and respect Reduce Motion. The window never takes keyboard focus, needs no special permission and is not shown over full-screen apps or the lock screen.
+- **Broken CRT count:** each time a CRT breaks (more hits on a broken CRT don't count again), the app sends `/api/smash` with the agent, the model a vote would carry and, for Claude Code, the detected effort level. It needs an existing token, is skipped while paused and is never queued or retried. The server keeps daily counts only.
+- **Claude Code running:** while the opt-in statusline observation (see below) was refreshed in the last 2 minutes, the screen scrolls agent-style output until the CRT breaks.
+- **Light on resources:** one 10 s check of the observation file while the CRT is shown; animations run only briefly after a hit or a repair, or at 20 fps while Claude Code output scrolls, and respect Reduce Motion. The window never takes keyboard focus, needs no special permission and is not shown over full-screen apps or the lock screen.
 
 ## What it reads on your Mac
 
@@ -45,7 +47,7 @@ Nothing beyond what you turn on:
 | Setting                                                                                                                                          | Reads                                                                                                                                                                              |
 | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Always                                                                                                                                           | Its own cache in `~/Library/Application Support/DerpMeter/` (0600, refreshed every 5 min) and its Keychain item                                                                    |
-| _Detect the model_ (off by default)                                                                                                              | Only the model setting of each agent: `model` in `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR`), `model` in `~/.codex/config.toml`, `model.name` in `~/.gemini/settings.json` |
+| _Detect the model_ (off by default)                                                                                                              | Only the model setting of each agent: `model` in `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR`), `model` in `~/.codex/config.toml`, `model.name` in `~/.gemini/settings.json`, plus Claude Code's `effortLevel` (or `CLAUDE_CODE_EFFORT_LEVEL`) |
 | _Use local session observations_ (off by default; also needs `derp privacy session on` in the [CLI](https://github.com/derpmeter/derpmeter-cli)) | Only `~/.derpmeter/observed.json` (agent, model, time). That live Claude Code model wins while fresh, and votes are marked session-linked                                          |
 
 Model detection details:

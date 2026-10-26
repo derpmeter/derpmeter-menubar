@@ -19,6 +19,8 @@ final class DerpSmashPet {
     /// Top-centre of the CRT. Resizes anchor here, not on the current frame,
     /// which SwiftUI may already have widened (left edge fixed) for the prompt.
     private var anchor: CGPoint?
+    /// Polls the small observation file while the CRT is up (Claude Code activity).
+    private var activity: Timer?
 
     init(model: AppModel, openDerpMeter: @escaping () -> Void) {
         self.model = model
@@ -36,12 +38,20 @@ final class DerpSmashPet {
             ? .floating
             : NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
         if !panel.isVisible { panel.orderFrontRegardless() }
+        if activity == nil {
+            model.refreshClaudeActivity()
+            activity = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.model.refreshClaudeActivity() }
+            }
+        }
     }
 
     /// Disable: close the window, stop animations and drop every reference.
     private func hide() {
         guard let panel else { return }
         subscriptions.removeAll()
+        activity?.invalidate()
+        activity = nil
         endAwake()
         controller?.reset()
         controller = nil
@@ -56,6 +66,7 @@ final class DerpSmashPet {
     private func makePanel() -> SmashPanel {
         let controller = SmashController(voter: model)
         controller.language = model.language
+        controller.onBroken = { [weak model] in model?.recordSmash() }
         self.controller = controller
         let size = layout.crt
         let origin = smashPlacement(saved: model.smash.origin, size: size, screens: Self.screens)
