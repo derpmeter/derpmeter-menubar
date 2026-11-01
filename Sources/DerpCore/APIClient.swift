@@ -132,6 +132,11 @@ public struct APIClient: Sendable {
         await perform(request("api/votes", method: "POST", token: token, body: try? JSONEncoder().encode(vote)))
     }
 
+    /// Optional follow-up answers for one of this installation's own votes.
+    public func submitDetails(_ body: DetailsBody, token: String) async -> SendOutcome {
+        await perform(request("api/votes/details", method: "POST", token: token, body: try? JSONEncoder().encode(body)))
+    }
+
     /// Derp Smash: count one broken CRT (POST /api/smash). Best effort, never queued.
     public func reportSmash(_ body: SmashBody, token: String) async -> SendOutcome {
         await perform(request("api/smash", method: "POST", token: token, body: try? JSONEncoder().encode(body)))

@@ -61,6 +61,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var tokenAccessPending = false
     @Published private(set) var voteStatus: VoteStatus?
     @Published private(set) var voteStatusAt: Date?
+    /// Optional follow-up questions for the last accepted vote (panel only).
+    @Published private(set) var followUp: FollowUpRound?
     /// A newer release advertised by /api/version (checked every 6 hours).
     @Published private(set) var update: UpdateNotice?
     private var versionCheckedAt: Date?
@@ -71,6 +73,8 @@ final class AppModel: ObservableObject {
     private let support: URL
     @Published private(set) var catalog: ModelCatalog?
     private var timer: Timer?
+    /// Fires when a cooldown ends so the score hides again right away.
+    private var revealTimer: Timer?
     private var hotKeys: HotKeys?
     private var lastNotifiedScore: Double?
     private var checkingVoteStatus = false
@@ -114,8 +118,15 @@ final class AppModel: ObservableObject {
     /// Strings in the current display language.
     var t: L10n { L10n(language) }
 
-    var title: String { menuBarTitle(snapshot: snapshot, agent: agent) }
-    var mood: DerpyMood { DerpyMood.from(score: snapshot?.leadScore(agent), loading: loading, offline: offline) }
+    var title: String { menuBarTitle(snapshot: snapshot, agent: agent, hidden: !scoreVisible(agent)) }
+    var mood: DerpyMood { DerpyMood.from(score: visibleScore(agent), loading: loading, offline: offline) }
+
+    /// Score after voting: an agent's Derp Score shows only while your own
+    /// vote for it (with the model a vote would carry) is in its cooldown, and
+    /// hides again once you can vote, so it never anchors the next vote. Same
+    /// idea as the web's hidden arm.
+    func scoreVisible(_ agent: Agent) -> Bool { availableAt(agent) != nil }
+    func visibleScore(_ agent: Agent) -> Double? { scoreVisible(agent) ? snapshot?.leadScore(agent) : nil }
     var pendingCount: Int { queue.items.filter { $0.state == .pending }.count }
 
     func refreshSoon() { Task { await refresh() } }
@@ -153,8 +164,52 @@ final class AppModel: ObservableObject {
         if let status = try? await client.fetchVoteStatus(token: token) {
             voteStatus = status
             voteStatusAt = Date()
+            scheduleReveal()
         }
     }
+
+    /// Redraw when the next cooldown ends (the score hides again then).
+    private func scheduleReveal() {
+        revealTimer?.invalidate()
+        let next = Agent.allCases.compactMap { availableAt($0) }.min()
+        guard let next else { return }
+        revealTimer = Timer.scheduledTimer(withTimeInterval: max(1, next.timeIntervalSinceNow + 1), repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                self?.objectWillChange.send()
+                self?.scheduleReveal()
+            }
+        }
+    }
+
+    /// Answer the current follow-up question; each answer is sent on its own
+    /// (the server merges them). Failures never touch the vote.
+    func answerFollowUp(_ values: [String]) {
+        guard var round = followUp, let question = round.current, let client else { return }
+        let body = DetailsBody(agent: round.agent.rawValue, key: round.key, question: question, values: values)
+        round.advance()
+        followUp = round
+        guard let body else { return }
+        Task {
+            guard let token = await Task.detached(operation: { TokenStore.read() }).value else { return }
+            let outcome = await client.submitDetails(body, token: token)
+            if case .accepted = outcome { return }
+            if var current = followUp, current.key == body.idempotencyKey { current.failed = true; followUp = current }
+        }
+    }
+
+    func toggleFollowUpChoice(_ value: String) {
+        guard var round = followUp else { return }
+        if let i = round.picked.firstIndex(of: value) { round.picked.remove(at: i) } else { round.picked.append(value) }
+        followUp = round
+    }
+
+    func skipFollowUp() {
+        guard var round = followUp else { return }
+        round.advance()
+        followUp = round
+    }
+
+    func closeFollowUp() { followUp = nil }
 
     /// When the selected agent can be voted on again with the model a vote
     /// would carry (nil = now). The cooldown is per agent and model.
@@ -302,6 +357,11 @@ final class AppModel: ObservableObject {
             }
             queue.record(item.id, outcome: outcome, now: Date())
             report(outcome, agent: item.body.agent)
+            // A new accepted vote opens the optional follow-up in the panel.
+            if case .accepted(replayed: false) = outcome, let agent = Agent(rawValue: item.body.agent) {
+                followUp = FollowUpRound(agent: agent, key: item.body.idempotencyKey, score: item.body.score,
+                                         rotation: Int.random(in: 0..<1000), at: Date())
+            }
         }
         persistQueue()
         await refreshVoteStatus()
@@ -317,7 +377,11 @@ final class AppModel: ObservableObject {
                 return
             }
             let outcome = await client.cancel(key: receipt.key, token: token)
-            if case .accepted = outcome { queue.dropReceipt(receipt.key); status = t.voteCancelled }
+            if case .accepted = outcome {
+                queue.dropReceipt(receipt.key)
+                status = t.voteCancelled
+                if followUp?.key == receipt.key { followUp = nil }
+            }
             else if outcome == .cancelled { queue.dropReceipt(receipt.key); status = t.alreadyCancelled }
             else { status = t.cancelFailed(t.outcome(outcome)) }
             persistQueue()
@@ -371,7 +435,8 @@ final class AppModel: ObservableObject {
     }
 
     private func checkScoreJump() {
-        guard notifyScoreJumps, let score = snapshot?.leadScore(agent), (snapshot?.leadSample(agent) ?? 0) >= 30 else { return }
+        // Never while the score is hidden: the notification would show it.
+        guard notifyScoreJumps, let score = visibleScore(agent), (snapshot?.leadSample(agent) ?? 0) >= 30 else { return }
         if let last = lastNotifiedScore, score - last >= 10 {
             notify(title: t.scoreJumpTitle(Int(score - last)), body: t.scoreJumpBody(agent, score: Int(score)))
         }

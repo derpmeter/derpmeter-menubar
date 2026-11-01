@@ -70,7 +70,7 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
 
     private func updateIcon() {
         guard let button = statusItem?.button else { return }
-        let score = model.snapshot?.leadScore(model.agent)
+        let score = model.visibleScore(model.agent)
         // Match ANSI mood semantics: 32 green, 33 yellow, 31 red. Native
         // adaptive colors stay legible across macOS menu bar appearances.
         let color: NSColor = score.map {
@@ -92,9 +92,11 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
         // Loading, queue and timestamp updates should not redraw the same title.
         if !button.attributedTitle.isEqual(to: title) { button.attributedTitle = title }
         let t = model.t
-        let sample = (model.snapshot?.leadSample(model.agent) ?? 0) < 30 ? " · \(t.lowSampleDetail)" : ""
+        let visible = model.scoreVisible(model.agent)
+        let sample = visible && (model.snapshot?.leadSample(model.agent) ?? 0) < 30 ? " · \(t.lowSampleDetail)" : ""
         let connection = model.paused ? " · \(t.pausedDetail)" : model.offline ? " · \(t.offlineDetail)" : ""
-        let detail = "DerpMeter · \(model.agent.displayName) · \(t.statusSentiment(score: score)) · \(model.title)\(sample)\(connection)"
+        let sentiment = visible ? t.statusSentiment(score: score) : t.scoreHiddenDetail
+        let detail = "DerpMeter · \(model.agent.displayName) · \(sentiment) · \(model.title)\(sample)\(connection)"
         button.toolTip = detail
         button.setAccessibilityLabel(detail)
         if popover.isShown, let view = popover.contentViewController?.view {

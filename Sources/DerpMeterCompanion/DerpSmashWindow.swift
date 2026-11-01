@@ -16,9 +16,10 @@ final class DerpSmashPet {
     private var awakeUntil = Date.distantPast
     private var layout = SmashLayout(size: .small)
     private var host: FirstMouseHostingView<DerpSmashView>?
-    /// Top-centre of the CRT. Resizes anchor here, not on the current frame,
-    /// which SwiftUI may already have widened (left edge fixed) for the prompt.
-    private var anchor: CGPoint?
+    private let geometry = SmashGeometry()
+    /// The CRT's frame on screen. It stays put when the prompt opens or closes;
+    /// the window grows around it to wherever the prompt fits.
+    private var crtFrame: CGRect?
     /// Polls the small observation file while the CRT is up (Claude Code activity).
     private var activity: Timer?
 
@@ -32,7 +33,7 @@ final class DerpSmashPet {
         let resized = SmashLayout(size: prefs.size) != layout
         layout = SmashLayout(size: prefs.size)
         let panel = panel ?? makePanel()
-        if resized { resize(prompt: controller?.machine.promptVisible ?? false) }
+        if resized { layOut(prompt: controller?.machine.promptVisible ?? false) }
         // Default: just above the desktop icons, so app windows cover it.
         panel.level = prefs.keepOnTop
             ? .floating
@@ -60,7 +61,7 @@ final class DerpSmashPet {
         panel.close()
         self.panel = nil
         host = nil
-        anchor = nil
+        crtFrame = nil
     }
 
     private func makePanel() -> SmashPanel {
@@ -71,13 +72,13 @@ final class DerpSmashPet {
         let size = layout.crt
         let origin = smashPlacement(saved: model.smash.origin, size: size, screens: Self.screens)
         let panel = SmashPanel(contentRect: CGRect(origin: origin, size: size))
-        let root = DerpSmashView(model: model, controller: controller, actions: .init(
+        let root = DerpSmashView(model: model, controller: controller, geometry: geometry, actions: .init(
             interacted: { [weak self] in self?.keepAwake() },
             hide: { [weak self] in self?.model.smash.enabled = false },
             openDerpMeter: { [weak self] in self?.openDerpMeter() }))
         let host = FirstMouseHostingView(rootView: root)
         host.sizingOptions = [] // the pet controls its own frame (prompt grows it)
-        host.crtSize = layout.crt
+        host.crtRect = CGRect(origin: .zero, size: size)
         host.onClick = { [weak self, weak controller] in
             self?.keepAwake()
             controller?.hit()
@@ -86,12 +87,12 @@ final class DerpSmashPet {
         panel.contentView = host
         self.panel = panel
         self.host = host
-        anchor = CGPoint(x: panel.frame.midX, y: panel.frame.maxY)
-        // Grow downward for the vote prompt, keeping the CRT where it is.
+        crtFrame = panel.frame
+        // Open the vote prompt where it fits, keeping the CRT where it is.
         // Shrinking waits one turn so SwiftUI has removed the prompt first
         // (its minimum height would otherwise block the resize).
         controller.$machine.map(\.promptVisible).removeDuplicates()
-            .sink { [weak self] visible in DispatchQueue.main.async { self?.resize(prompt: visible) } }
+            .sink { [weak self] visible in DispatchQueue.main.async { self?.layOut(prompt: visible) } }
             .store(in: &subscriptions)
         // A native window drag ends asynchronously: save once it settles.
         NotificationCenter.default.publisher(for: NSWindow.didMoveNotification, object: panel)
@@ -129,28 +130,38 @@ final class DerpSmashPet {
         awake = nil
     }
 
-    /// Resize around the CRT's top centre: the prompt hangs below it, and a
-    /// size change keeps the CRT where it was.
-    private func resize(prompt: Bool) {
+    /// Frame the window around the CRT (kept where it is, resized around its
+    /// top centre) and, when shown, the prompt placed where it fits on screen.
+    private func layOut(prompt: Bool) {
         guard let panel else { return }
-        host?.crtSize = layout.crt
-        let size = layout.window(prompt: prompt)
-        let a = anchor ?? CGPoint(x: panel.frame.midX, y: panel.frame.maxY)
-        panel.setFrame(CGRect(x: a.x - size.width / 2, y: a.y - size.height, width: size.width, height: size.height),
-                       display: true)
-        keepOnScreen(save: false)
+        let old = crtFrame ?? panel.frame
+        let size = layout.crt
+        var crt = CGRect(x: old.midX - size.width / 2, y: old.maxY - size.height, width: size.width, height: size.height)
+        crt.origin = smashPlacement(saved: crt.origin, size: crt.size, screens: Self.screens)
+        crtFrame = crt
+        let bubble = prompt ? smashPromptPlacement(crt: crt, prompt: layout.prompt, screens: Self.screens) : nil
+        let window = bubble.map { crt.union($0) } ?? crt
+        // Offsets from the window's top-left, as SwiftUI lays them out.
+        func offset(_ r: CGRect) -> CGPoint { CGPoint(x: r.minX - window.minX, y: window.maxY - r.maxY) }
+        geometry.crt = offset(crt)
+        if let bubble {
+            geometry.prompt = offset(bubble)
+            geometry.promptFacing = bubble.maxY <= crt.minY ? .top : bubble.minY >= crt.maxY ? .bottom
+                : bubble.minX >= crt.maxX ? .leading : .trailing
+        }
+        // AppKit coordinates (bottom-left origin) for the hosting view's hit test.
+        host?.crtRect = CGRect(x: crt.minX - window.minX, y: crt.minY - window.minY, width: crt.width, height: crt.height)
+        if panel.frame != window { panel.setFrame(window, display: true) }
     }
 
-    /// Clamp into the visible screens; remember the CRT's bottom-left corner.
+    /// After a drag or a display change: keep the CRT on screen, re-place the
+    /// prompt around it, and remember the CRT's bottom-left corner.
     private func keepOnScreen(save: Bool) {
-        guard let panel else { return }
-        let origin = smashPlacement(saved: panel.frame.origin, size: panel.frame.size, screens: Self.screens)
-        if origin != panel.frame.origin { panel.setFrameOrigin(origin) }
-        anchor = CGPoint(x: panel.frame.midX, y: panel.frame.maxY)
-        if save {
-            let frame = panel.frame
-            model.smash.origin = CGPoint(x: frame.midX - layout.crt.width / 2, y: frame.maxY - layout.crt.height)
-        }
+        guard let panel, let host else { return }
+        let r = host.crtRect
+        crtFrame = CGRect(x: panel.frame.minX + r.minX, y: panel.frame.minY + r.minY, width: r.width, height: r.height)
+        layOut(prompt: controller?.machine.promptVisible ?? false)
+        if save, let crt = crtFrame { model.smash.origin = crt.origin }
     }
 }
 
@@ -178,8 +189,8 @@ final class SmashPanel: NSPanel {
 /// moves the window natively. SwiftUI gestures are unreliable in a panel that
 /// never becomes key. Right-clicks and the vote prompt stay with SwiftUI.
 final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
-    /// The CRT occupies the top-centre of the window.
-    var crtSize: CGSize = .zero
+    /// Where the CRT is in the view (AppKit coordinates, bottom-left origin).
+    var crtRect: CGRect = .zero
     var onClick: () -> Void = {}
     private var downAt: NSPoint?
     private var dragged = false
@@ -187,9 +198,9 @@ final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     private func inCRT(_ event: NSEvent) -> Bool {
-        let p = convert(event.locationInWindow, from: nil)
-        let top = isFlipped ? p.y <= crtSize.height : p.y >= bounds.height - crtSize.height
-        return top && abs(p.x - bounds.midX) <= crtSize.width / 2
+        var p = convert(event.locationInWindow, from: nil)
+        if isFlipped { p.y = bounds.height - p.y }
+        return crtRect.contains(p)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -255,8 +266,13 @@ func renderSmashStates(model: AppModel, to directory: URL) {
         for _ in 0..<hits { controller.hit(); now = now.addingTimeInterval(1) }
         if dismiss { controller.dismissPrompt() }
         if name == "repairing" { controller.repair() }
-        let size = SmashLayout(size: model.smash.size).window(prompt: controller.machine.promptVisible)
-        let view = DerpSmashView(model: model, controller: controller, actions: actions)
+        let layout = SmashLayout(size: model.smash.size)
+        let size = layout.window(prompt: controller.machine.promptVisible)
+        // The prompt hanging below the CRT, as on a free spot of the desktop.
+        let geometry = SmashGeometry()
+        geometry.crt = CGPoint(x: (size.width - layout.crt.width) / 2, y: 0)
+        geometry.prompt = CGPoint(x: (size.width - layout.prompt.width) / 2, y: layout.crt.height)
+        let view = DerpSmashView(model: model, controller: controller, geometry: geometry, actions: actions)
             .frame(width: size.width, height: size.height)
             .background(Color(red: 0.16, green: 0.20, blue: 0.27))
         let renderer = ImageRenderer(content: view)

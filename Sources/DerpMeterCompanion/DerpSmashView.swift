@@ -14,6 +14,8 @@ struct DerpSmashView: View {
 
     @ObservedObject var model: AppModel
     @ObservedObject var controller: SmashController
+    /// Where the CRT and the prompt sit in the window (set by the pet).
+    @ObservedObject var geometry: SmashGeometry
     let actions: Actions
     private let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
 
@@ -25,19 +27,23 @@ struct DerpSmashView: View {
     var body: some View {
         // Drawn at the base size and scaled to the chosen size.
         let layout = SmashLayout(size: model.smash.size)
-        VStack(spacing: 0) {
+        ZStack(alignment: .topLeading) {
             crt
                 .scaleEffect(layout.crtScale, anchor: .topLeading)
                 .frame(width: layout.crt.width, height: layout.crt.height, alignment: .topLeading)
+                .offset(x: geometry.crt.x, y: geometry.crt.y)
             if machine.promptVisible {
                 SmashPrompt(model: model, controller: controller, interacted: actions.interacted)
-                    .padding(.top, 8)
-                    .frame(width: SmashLayout.promptBase.width, height: SmashLayout.promptBase.height, alignment: .top)
+                    // Hug the CRT: the gap sits on the side that faces it.
+                    .padding(Edge.Set(geometry.promptFacing), 8)
+                    .frame(width: SmashLayout.promptBase.width, height: SmashLayout.promptBase.height,
+                           alignment: geometry.promptAlignment)
                     .scaleEffect(layout.promptScale, anchor: .topLeading)
                     .frame(width: layout.prompt.width, height: layout.prompt.height, alignment: .topLeading)
+                    .offset(x: geometry.prompt.x, y: geometry.prompt.y)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .environment(\.locale, model.language.locale)
         .onChange(of: controller.impacts) {
             SmashSound.play(model.smash.weapon, broken: machine.state == .broken || machine.promptVisible,
@@ -118,6 +124,24 @@ struct DerpSmashView: View {
         Divider()
         Button(t.hideSmash) { actions.hide() }
         Button(t.openDerpMeter) { actions.openDerpMeter() }
+    }
+}
+
+/// Offsets (from the window's top-left) of the CRT and the vote prompt.
+@MainActor
+final class SmashGeometry: ObservableObject {
+    @Published var crt: CGPoint = .zero
+    @Published var prompt: CGPoint = .zero
+    /// The prompt's edge that faces the CRT (.top when it hangs below).
+    @Published var promptFacing: Edge = .top
+
+    var promptAlignment: Alignment {
+        switch promptFacing {
+        case .top: return .top
+        case .bottom: return .bottom
+        case .leading: return .topLeading
+        case .trailing: return .topTrailing
+        }
     }
 }
 

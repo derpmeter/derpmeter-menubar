@@ -254,4 +254,27 @@ final class SmashPreferencesTests: XCTestCase {
         XCTAssertEqual(smashPlacement(saved: nil, size: size, screens: [main, side]),
                        CGPoint(x: 1440 - 220 - 24, y: 24))
     }
+
+    func testPromptOpensWhereItFitsWithoutMovingTheCRT() {
+        let screen = CGRect(x: 0, y: 0, width: 1920, height: 1050)
+        let prompt = CGSize(width: 187, height: 150)
+        // Room below: hangs under the CRT, centred.
+        let crt = CGRect(x: 800, y: 600, width: 132, height: 126)
+        XCTAssertEqual(smashPromptPlacement(crt: crt, prompt: prompt, screens: [screen]),
+                       CGRect(x: 772.5, y: 450, width: 187, height: 150))
+        // Bottom-right corner (the default spot): opens above, slid left of the edge.
+        let corner = CGRect(x: 1920 - 132, y: 24, width: 132, height: 126)
+        XCTAssertEqual(smashPromptPlacement(crt: corner, prompt: prompt, screens: [screen]),
+                       CGRect(x: 1920 - 187, y: 150, width: 187, height: 150))
+        // No room above or below (short screen): beside it, on the left at the right edge.
+        let short = CGRect(x: 0, y: 0, width: 1920, height: 260)
+        let middle = CGRect(x: 1700, y: 60, width: 132, height: 126)
+        XCTAssertEqual(smashPromptPlacement(crt: middle, prompt: prompt, screens: [short]),
+                       CGRect(x: 1700 - 187, y: 36, width: 187, height: 150))
+        // On a second display: placed on that display.
+        let side = CGRect(x: 1920, y: -200, width: 1440, height: 900)
+        let there = CGRect(x: 2000, y: 400, width: 132, height: 126)
+        XCTAssertEqual(smashPromptPlacement(crt: there, prompt: prompt, screens: [screen, side]),
+                       CGRect(x: 1972.5, y: 250, width: 187, height: 150))
+    }
 }

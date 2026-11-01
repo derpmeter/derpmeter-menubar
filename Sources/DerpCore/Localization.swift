@@ -93,6 +93,75 @@ public struct L10n: Sendable {
     public var derpScore: String { t("Derp Score", "멍청 지수") }
     public var sentimentNotBenchmark: String { t("Sentiment, not a benchmark.", "체감이며 벤치마크가 아니에요.") }
 
+    // MARK: Score after voting and follow-up questions
+
+    /// Menu bar tooltip while the score is hidden.
+    public var scoreHiddenDetail: String { t("Vote to see the Derp Score", "투표하면 멍청 지수가 보여요") }
+    /// Agent card in place of the sample size.
+    public var scoreHiddenShort: String { t("after you vote", "투표 후 공개") }
+    public var scoreHiddenTag: String { t("SHOWN AFTER YOU VOTE", "투표 후 공개") }
+    public var scoreHiddenNote: String {
+        t("Vote first, then see how everyone else rated it. The score stays visible until you can vote again.",
+          "먼저 투표하면 다른 사람들의 평가가 보여요. 다시 투표할 수 있을 때까지 점수가 보여요.")
+    }
+    public var followUpTitle: String { t("30 more seconds? (optional)", "30초만 더? (선택)") }
+    public var followUpLead: String {
+        t("Helps read the score. Choices only, nothing typed.", "점수를 읽는 데 도움이 돼요. 입력 없이 고르기만 하면 돼요.")
+    }
+    public var followUpSkip: String { t("Skip", "건너뛰기") }
+    public var followUpNext: String { t("Next", "다음") }
+    public var followUpClose: String { t("Close", "닫기") }
+    public var followUpDone: String { t("Thanks. That helps.", "고마워요. 큰 도움이 돼요.") }
+    public var followUpFailed: String { t("Couldn't save that answer.", "답변을 저장하지 못했어요.") }
+    public func followUpProgress(_ i: Int, _ n: Int) -> String { "\(i)/\(n)" }
+
+    public func question(_ q: FollowUpQuestion) -> String {
+        switch q {
+        case .vsUsual: return t("Compared with a usual day?", "평소와 비교하면?")
+        case .task: return t("What were you working on?", "무슨 작업이었나요?")
+        case .session: return t("How long was the session?", "세션은 얼마나 길었나요?")
+        case .languages: return t("Main languages? (pick any)", "주로 쓴 언어는? (복수 선택)")
+        case .wentWell: return t("What went well? (pick any)", "뭐가 좋았나요? (복수 선택)")
+        case .frequency: return t("How often do you use it?", "얼마나 자주 쓰나요?")
+        }
+    }
+
+    public func choice(_ value: String) -> String {
+        switch value {
+        case "much_better": return t("Much better", "훨씬 나음")
+        case "better": return t("Better", "나음")
+        case "same": return t("About the same", "비슷함")
+        case "worse": return t("Worse", "나빠짐")
+        case "much_worse": return t("Much worse", "훨씬 나빠짐")
+        case "feature": return t("New feature", "새 기능")
+        case "bugfix": return t("Bug fix", "버그 수정")
+        case "refactor": return t("Refactor", "리팩터링")
+        case "test": return t("Tests", "테스트")
+        case "docs": return t("Docs", "문서")
+        case "explore": return t("Questions, exploring", "질문·탐색")
+        case "lt15m": return t("Under 15 min", "15분 미만")
+        case "lt1h": return t("Under 1 hour", "1시간 이내")
+        case "lt3h": return t("1–3 hours", "1~3시간")
+        case "gte3h": return t("3+ hours", "3시간 이상")
+        case "ts_js": return "TS/JS"
+        case "python": return "Python"
+        case "go": return "Go"
+        case "rust": return "Rust"
+        case "jvm": return "Java/Kotlin"
+        case "swift": return "Swift"
+        case "c_cpp": return "C/C++"
+        case "other": return t("Other", "기타")
+        case "followed": return t("Followed instructions", "지시를 잘 따름")
+        case "one_shot": return t("Solved in one go", "한 번에 해결")
+        case "fast": return t("Fast", "빠름")
+        case "quality": return t("Clean code", "코드 품질")
+        case "daily": return t("Daily", "매일")
+        case "weekly": return t("A few times a week", "주 몇 회")
+        case "sometimes": return t("Now and then", "가끔")
+        default: return value
+        }
+    }
+
     // MARK: Menu bar item (tooltip and VoiceOver)
 
     public func statusSentiment(score: Double?) -> String {

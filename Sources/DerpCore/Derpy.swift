@@ -45,7 +45,9 @@ public func statuslineMoodFace(score: Double?) -> String {
 }
 
 /// Low-sample, agent and connection details stay in the tooltip and panel.
-public func menuBarTitle(snapshot: IndexSnapshot?, agent: Agent) -> String {
+/// `hidden`: the score shows only after your vote, until you can vote again.
+public func menuBarTitle(snapshot: IndexSnapshot?, agent: Agent, hidden: Bool = false) -> String {
+    if hidden { return "\(statuslineMoodFace(score: nil)) · Derp ?" }
     let score = snapshot?.leadScore(agent)
     let value = score.map { String(Int($0.rounded())) } ?? "—"
     return "\(statuslineMoodFace(score: score)) · Derp \(value)"

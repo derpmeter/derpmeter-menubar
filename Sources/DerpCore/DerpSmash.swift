@@ -332,6 +332,26 @@ public func smashPlacement(saved: CGPoint?, size: CGSize, screens: [CGRect], mar
     return clamp(CGPoint(x: main.maxX - size.width - margin, y: main.minY + margin), into: main)
 }
 
+/// Where the vote prompt opens around a CRT that stays put: below it when
+/// that fits on the CRT's screen, else above, else beside it (right, then
+/// left). Centred on the CRT and slid along the edge to stay on screen.
+public func smashPromptPlacement(crt: CGRect, prompt: CGSize, screens: [CGRect]) -> CGRect {
+    let screen = screens.max { $0.intersection(crt).area < $1.intersection(crt).area } ?? crt
+    func slide(_ v: CGFloat, _ length: CGFloat, _ lo: CGFloat, _ hi: CGFloat) -> CGFloat {
+        min(max(v, lo), max(lo, hi - length))
+    }
+    let x = slide(crt.midX - prompt.width / 2, prompt.width, screen.minX, screen.maxX)
+    if crt.minY - prompt.height >= screen.minY {
+        return CGRect(x: x, y: crt.minY - prompt.height, width: prompt.width, height: prompt.height)
+    }
+    if crt.maxY + prompt.height <= screen.maxY {
+        return CGRect(x: x, y: crt.maxY, width: prompt.width, height: prompt.height)
+    }
+    let y = slide(crt.maxY - prompt.height, prompt.height, screen.minY, screen.maxY)
+    let side = crt.maxX + prompt.width <= screen.maxX ? crt.maxX : crt.minX - prompt.width
+    return CGRect(x: side, y: y, width: prompt.width, height: prompt.height)
+}
+
 private extension CGRect {
     var area: CGFloat { isNull ? 0 : width * height }
 }

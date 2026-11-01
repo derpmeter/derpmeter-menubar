@@ -19,6 +19,8 @@ There is nothing to set up. The first vote gets a random menu bar token automati
 ## Features
 
 - **Score in the menu bar** in the same mood format as the CLI statusline: `(•‿•) · Derp 20`, `(•_•) · Derp 50`, `(⊙_☉) · Derp 80`. Smart is below 35 (green), Meh 35–64 (yellow), Dumb 65+ (red). Low samples, cached or offline data and pause show in the tooltip and panel.
+- **Score after you vote:** an agent's score shows only after you vote on it from the app (with the model a vote would carry), until you can vote again. Before that the menu bar reads `(·_·) · Derp ?` and the panel hides the number, the daily bars and the score-jump notification, so the score doesn't sway your vote.
+- **Optional follow-up:** after an accepted vote the panel asks up to three multiple-choice questions, the same as on the website. Skip or close them any time; answers never change the Derp Score.
 - **Panel:** the three agents' scores, a sentiment scale and Smart / Meh / Dumb buttons, with an optional failure reason. The score is community sentiment, not a capability benchmark.
 - **Model choice:** _Auto_ (the detected model), _No model_, or any current catalog model. The choice is remembered per agent and the cooldown follows it.
 - **Cooldown countdown:** "Next vote in 37 min" for the selected agent and model; the buttons stay disabled until then.

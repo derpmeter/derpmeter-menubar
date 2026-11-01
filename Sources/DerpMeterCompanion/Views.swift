@@ -101,7 +101,8 @@ struct MenuContent: View {
 
     /// The blended Derp Score for the selected agent (nil on older servers).
     private var blended: BlendedScore.AgentScore? { model.snapshot?.score?.agent(model.agent) }
-    private var shownScore: Double? { model.snapshot?.leadScore(model.agent) }
+    private var scoreHidden: Bool { !model.scoreVisible(model.agent) }
+    private var shownScore: Double? { model.visibleScore(model.agent) }
     private var shownSample: Int { model.snapshot?.leadSample(model.agent) ?? 0 }
     private var t: L10n { model.t }
     private var connection: String {
@@ -153,6 +154,7 @@ struct MenuContent: View {
                     scoreCard
                     modelSection
                     voteSection
+                    if let round = model.followUp { followUpCard(round) }
                     if let status = model.status {
                         Label(status, systemImage: "info.circle")
                             .font(.custom("Geist-Regular", size: 11)).foregroundStyle(PanelStyle.muted)
@@ -189,7 +191,8 @@ struct MenuContent: View {
         if model.client == nil { height += 28 }
         if model.availableAt(model.agent) != nil { height += 25 }
         if model.snapshot?.mode == "demo" { height += 22 }
-        if model.snapshot?.score != nil { height += 70 }
+        if model.snapshot?.score != nil { height += scoreHidden ? 34 : 70 }
+        if let round = model.followUp { height += round.finished ? 50 : round.current?.multi == true ? 190 : 170 }
         if model.showMascot { height += 39 }
         if showReason { height += 64 }
         if !model.queue.items.isEmpty { height += 30 }
@@ -247,7 +250,8 @@ struct MenuContent: View {
         HStack(spacing: 8) {
             ForEach(Agent.allCases) { agent in
                 let selected = agent == model.agent
-                let shown = model.snapshot?.leadScore(agent)
+                let visible = model.scoreVisible(agent)
+                let shown = model.visibleScore(agent)
                 let sample = model.snapshot?.leadSample(agent) ?? 0
                 Button { model.agent = agent } label: {
                     VStack(alignment: .leading, spacing: 7) {
@@ -260,11 +264,11 @@ struct MenuContent: View {
                                 Image(systemName: "checkmark").font(.system(size: 8, weight: .bold)).foregroundStyle(PanelStyle.green)
                             }
                         }
-                        Text(shown.map { String(format: "%.1f", $0) } ?? "—")
+                        Text(visible ? shown.map { String(format: "%.1f", $0) } ?? "—" : "?")
                             .font(.system(size: 26, weight: .medium, design: .monospaced)).tracking(-1.7)
                             .foregroundStyle(shown == nil ? PanelStyle.muted : PanelStyle.text)
                             .contentTransition(.numericText())
-                        Text("n=\(sample)")
+                        Text(visible ? "n=\(sample)" : t.scoreHiddenShort)
                             .font(.system(size: 9, design: .monospaced)).foregroundStyle(PanelStyle.muted)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading).padding(10)
@@ -273,8 +277,10 @@ struct MenuContent: View {
                     .contentShape(RoundedRectangle(cornerRadius: 8))
                 }
                 .buttonStyle(PanelButtonStyle())
-                .help(t.agentHelp(agent, sample: sample))
-                .accessibilityLabel(t.selectAgentAccessibility(agent, score: shown.map { String(format: "%.1f", $0) }, sample: sample))
+                .help(visible ? t.agentHelp(agent, sample: sample) : t.scoreHiddenDetail)
+                .accessibilityLabel(visible
+                    ? t.selectAgentAccessibility(agent, score: shown.map { String(format: "%.1f", $0) }, sample: sample)
+                    : "\(agent.displayName), \(t.scoreHiddenDetail)")
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
@@ -288,7 +294,10 @@ struct MenuContent: View {
                 Text(model.agent.displayName).font(.custom("Geist-Bold", size: 12))
                 Text(t.derpScoreTag).font(.system(size: 8, design: .monospaced)).foregroundStyle(PanelStyle.muted)
                 Spacer(minLength: 4)
-                if shownSample < 30 {
+                if scoreHidden {
+                    Text(t.scoreHiddenTag)
+                        .font(.system(size: 8, design: .monospaced)).foregroundStyle(PanelStyle.accent)
+                } else if shownSample < 30 {
                     Text(shownScore == nil ? t.noVotesYetTag : t.lowSampleTag)
                         .font(.system(size: 8, design: .monospaced)).foregroundStyle(PanelStyle.amber)
                 }
@@ -309,7 +318,7 @@ struct MenuContent: View {
                 .frame(height: 15)
             }
             .frame(height: 15)
-            .accessibilityLabel(t.scoreAccessibility(shownScore.map { String(format: "%.1f", $0) }))
+            .accessibilityLabel(scoreHidden ? t.scoreHiddenDetail : t.scoreAccessibility(shownScore.map { String(format: "%.1f", $0) }))
             HStack {
                 Text(t.scaleSmart).foregroundStyle(PanelStyle.green)
                 Spacer()
@@ -318,7 +327,10 @@ struct MenuContent: View {
                 Text(t.scaleDumb).foregroundStyle(PanelStyle.coral)
             }
             .font(.system(size: 8, design: .monospaced))
-            if let blended { components(blended) }
+            if scoreHidden {
+                Text(t.scoreHiddenNote).font(.system(size: 10)).foregroundStyle(PanelStyle.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if let blended { components(blended) }
             if model.showMascot {
                 MeterGlyph(score: shownScore, mascot: true)
                     .foregroundStyle(PanelStyle.accent).frame(width: 40, height: 30).frame(maxWidth: .infinity)
@@ -463,6 +475,63 @@ struct MenuContent: View {
             }
             .foregroundStyle(PanelStyle.muted)
         }
+    }
+
+    /// Optional follow-up after an accepted vote: one question at a time,
+    /// choices only. Single-choice answers send on tap; multi-choice on Next.
+    private func followUpCard(_ round: FollowUpRound) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(t.followUpTitle).font(.custom("Geist-Bold", size: 12))
+                Spacer()
+                if !round.finished {
+                    Text(t.followUpProgress(round.index + 1, round.questions.count))
+                        .font(.system(size: 9, design: .monospaced)).foregroundStyle(PanelStyle.muted)
+                }
+                Button { model.closeFollowUp() } label: { Image(systemName: "xmark").font(.system(size: 9, weight: .bold)) }
+                    .buttonStyle(.plain).foregroundStyle(PanelStyle.muted)
+                    .help(t.followUpClose).accessibilityLabel(t.followUpClose)
+            }
+            if let question = round.current {
+                Text(t.followUpLead).font(.system(size: 10)).foregroundStyle(PanelStyle.muted)
+                Text(t.question(question)).font(.custom("Geist-Regular", size: 12))
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 6) {
+                    ForEach(question.choices, id: \.self) { value in
+                        let picked = round.picked.contains(value)
+                        Button {
+                            if question.multi { model.toggleFollowUpChoice(value) } else { model.answerFollowUp([value]) }
+                        } label: {
+                            Text(t.choice(value)).font(.system(size: 11))
+                                .frame(maxWidth: .infinity).padding(.vertical, 6)
+                                .background(picked ? PanelStyle.accent.opacity(0.18) : PanelStyle.surface, in: RoundedRectangle(cornerRadius: 6))
+                                .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(picked ? PanelStyle.accent : PanelStyle.border) }
+                                .contentShape(RoundedRectangle(cornerRadius: 6))
+                        }
+                        .buttonStyle(PanelButtonStyle())
+                        .accessibilityAddTraits(picked ? .isSelected : [])
+                    }
+                }
+                HStack {
+                    if round.failed {
+                        Text(t.followUpFailed).font(.system(size: 10)).foregroundStyle(PanelStyle.amber)
+                    }
+                    Spacer()
+                    Button(t.followUpSkip) { model.skipFollowUp() }
+                        .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(PanelStyle.muted)
+                    if question.multi {
+                        Button(t.followUpNext) { model.answerFollowUp(round.picked) }
+                            .font(.custom("Geist-Bold", size: 11))
+                            .disabled(round.picked.isEmpty)
+                    }
+                }
+            } else {
+                Text(round.failed ? t.followUpFailed : t.followUpDone)
+                    .font(.system(size: 11)).foregroundStyle(round.failed ? PanelStyle.amber : PanelStyle.green)
+            }
+        }
+        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        .background(PanelStyle.accent.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+        .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(PanelStyle.accent.opacity(0.35)) }
     }
 
     private var queueSection: some View {
