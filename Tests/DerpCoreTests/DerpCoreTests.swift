@@ -327,6 +327,16 @@ final class ClaudeSettingsTests: XCTestCase {
         XCTAssertNil(r("opus", .geminiCli), "aliases are Claude Code only")
         XCTAssertEqual(ModelChoice.auto.resolve(detected: "opus", agent: .claudeCode, catalog: catalog), "claude-opus-5-5")
     }
+
+    func testCatalogAliasesPickTheModel() throws {
+        let catalog = try JSONDecoder().decode(ModelCatalog.self, from: Data(#"{"models":[{"id":"claude-fable-5-2","agent":"claude-code","aliases":["fable"]},{"id":"claude-fable-5-1","agent":"claude-code"},{"id":"claude-opus-5-5","agent":"claude-code","aliases":["opus","opusplan"]},{"id":"gpt-6.1-sol","agent":"codex"}]}"#.utf8))
+        let r = { (raw: String, agent: Agent) in LocalModelSettings.resolve(raw, agent: agent, catalog: catalog) }
+        XCTAssertEqual(r("fable", .claudeCode), "claude-fable-5-2", "two Fables, one alias")
+        XCTAssertEqual(r("claude-fable-5-1", .claudeCode), "claude-fable-5-1")
+        XCTAssertEqual(r("opusplan", .claudeCode), "claude-opus-5-5")
+        XCTAssertNil(r("haiku", .claudeCode), "aliases served: no family guessing")
+        XCTAssertNil(r("opus", .codex))
+    }
 }
 
 final class BlendedScoreTests: XCTestCase {

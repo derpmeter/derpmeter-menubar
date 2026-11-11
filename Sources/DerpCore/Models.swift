@@ -189,6 +189,9 @@ public struct ModelCatalog: Codable, Equatable, Sendable {
         public let id: String
         public let agent: String
         public let name: String?
+        /// Names the agent's own settings use for this model (e.g. "fable").
+        /// Older servers omit it.
+        public var aliases: [String]? = nil
     }
     public let models: [Entry]
     public func contains(_ model: String, for agent: Agent) -> Bool {

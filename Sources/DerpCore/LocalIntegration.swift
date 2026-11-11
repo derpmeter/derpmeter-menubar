@@ -120,15 +120,20 @@ public enum LocalModelSettings {
     }
 
     /// Maps a configured value to a catalog id for the agent (same rules as the
-    /// CLI): exact ids win ("[1m]" and date suffixes ignored); a Claude alias
-    /// maps to the single current catalog model of that family, else nothing.
+    /// CLI): exact ids win ("[1m]" and date suffixes ignored); aliases come from
+    /// the catalog (/api/models), so a new model needs no release. A catalog
+    /// without aliases falls back to the single current Claude model of that family.
     public static func resolve(_ raw: String?, agent: Agent, catalog: ModelCatalog?) -> String? {
         guard let raw, let catalog else { return nil }
-        let ids = catalog.models.filter { $0.agent == agent.rawValue }.map(\.id)
+        let models = catalog.models.filter { $0.agent == agent.rawValue }
+        let ids = models.map(\.id)
         var id = raw.lowercased()
         if id.hasSuffix("[1m]") { id.removeLast(4) }
         if let range = id.range(of: #"-\d{8}$"#, options: .regularExpression) { id.removeSubrange(range) }
         if ids.contains(id) { return id }
+        let aliased = models.filter { $0.aliases?.contains(id) == true }
+        if aliased.count == 1 { return aliased[0].id }
+        if models.contains(where: { $0.aliases != nil }) { return nil }
         guard agent == .claudeCode else { return nil }
         let family = id == "opusplan" ? "opus" : id
         guard ["opus", "sonnet", "haiku", "fable"].contains(family) else { return nil }
