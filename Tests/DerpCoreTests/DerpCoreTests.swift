@@ -328,6 +328,25 @@ final class ClaudeSettingsTests: XCTestCase {
         XCTAssertEqual(ModelChoice.auto.resolve(detected: "opus", agent: .claudeCode, catalog: catalog), "claude-opus-5-5")
     }
 
+    func testUnlistedModelIsAVersionedIdTheCatalogDoesNotMatch() throws {
+        let catalog = try JSONDecoder().decode(ModelCatalog.self, from: Data(#"{"models":[{"id":"gemini-4-hydrogen","agent":"gemini-cli","aliases":["gemini-4-hydrogen-medium"]},{"id":"claude-opus-5-5","agent":"claude-code","aliases":["opus"]}]}"#.utf8))
+        let u = { (raw: String, agent: Agent) in LocalModelSettings.unlisted(raw, agent: agent, catalog: catalog) }
+        XCTAssertEqual(u("gemini-5-neon-medium", .geminiCli), "gemini-5-neon-medium")
+        XCTAssertEqual(u("Claude-Opus-5-6[1m]", .claudeCode), "claude-opus-5-6")
+        XCTAssertEqual(u("claude-opus-5-6-20261201", .claudeCode), "claude-opus-5-6")
+        XCTAssertNil(u("gemini-4-hydrogen-medium", .geminiCli))
+        XCTAssertNil(u("opus", .claudeCode))
+        XCTAssertNil(u("sonnet", .claudeCode), "a family name is not a model id")
+        XCTAssertNil(u("my model 2", .codex))
+        XCTAssertNil(LocalModelSettings.unlisted("gpt-7", agent: .codex, catalog: nil))
+        // Sent apart from the model, never with it.
+        let unlisted = VoteBody(agent: .codex, rating: .meh, unlistedModel: "gpt-7")
+        XCTAssertEqual(unlisted.unlistedModel, "gpt-7")
+        XCTAssertNil(VoteBody(agent: .codex, rating: .meh, model: "gpt-6.1-sol", unlistedModel: "gpt-7").unlistedModel)
+        let json = String(decoding: try JSONEncoder().encode(VoteBody(agent: .codex, rating: .meh)), as: UTF8.self)
+        XCTAssertFalse(json.contains("unlistedModel"), "absent unless there is one")
+    }
+
     func testCatalogAliasesPickTheModel() throws {
         let catalog = try JSONDecoder().decode(ModelCatalog.self, from: Data(#"{"models":[{"id":"claude-fable-5-2","agent":"claude-code","aliases":["fable"]},{"id":"claude-fable-5-1","agent":"claude-code"},{"id":"claude-opus-5-5","agent":"claude-code","aliases":["opus","opusplan"]},{"id":"gpt-6.1-sol","agent":"codex"}]}"#.utf8))
         let r = { (raw: String, agent: Agent) in LocalModelSettings.resolve(raw, agent: agent, catalog: catalog) }

@@ -56,12 +56,16 @@ public struct VoteBody: Codable, Equatable, Sendable {
     public let score: Int
     public let source: String
     public let model: String?
+    /// A detected model the catalog does not list yet (an id only); counted
+    /// per day by the server, never stored with the vote. Never with `model`.
+    public let unlistedModel: String?
     public let failureReason: String?
     public let sessionLinked: Bool?
     public let idempotencyKey: String
 
     public init(
         agent: Agent, rating: Rating, model: String? = nil,
+        unlistedModel: String? = nil,
         reason: FailureReason? = nil, sessionLinked: Bool = false,
         idempotencyKey: UUID = UUID()
     ) {
@@ -69,6 +73,7 @@ public struct VoteBody: Codable, Equatable, Sendable {
         self.score = rating.score
         self.source = "menu-bar"
         self.model = model
+        self.unlistedModel = model == nil ? unlistedModel : nil
         // The server accepts reasons only with Meh/Dumb.
         self.failureReason = rating == .smart ? nil : reason?.rawValue
         self.sessionLinked = sessionLinked ? true : nil

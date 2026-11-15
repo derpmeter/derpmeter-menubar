@@ -46,11 +46,11 @@ A small retro CRT on your desktop that you can smash with a hammer or a baseball
 
 Nothing beyond what you turn on:
 
-| Setting                                                                                                                                          | Reads                                                                                                                                                                              |
-| ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Always                                                                                                                                           | Its own cache in `~/Library/Application Support/DerpMeter/` (0600, refreshed every 5 min) and its Keychain item                                                                    |
+| Setting                                                                                                                                          | Reads                                                                                                                                                                                                                                                |
+| ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Always                                                                                                                                           | Its own cache in `~/Library/Application Support/DerpMeter/` (0600, refreshed every 5 min) and its Keychain item                                                                                                                                      |
 | _Detect the model_ (off by default)                                                                                                              | Only the model setting of each agent: `model` in `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR`), `model` in `~/.codex/config.toml`, `model.name` in `~/.gemini/settings.json`, plus Claude Code's `effortLevel` (or `CLAUDE_CODE_EFFORT_LEVEL`) |
-| _Use local session observations_ (off by default; also needs `derp privacy session on` in the [CLI](https://github.com/derpmeter/derpmeter-cli)) | Only `~/.derpmeter/observed.json` (agent, model, time). That live Claude Code model wins while fresh, and votes are marked session-linked                                          |
+| _Use local session observations_ (off by default; also needs `derp privacy session on` in the [CLI](https://github.com/derpmeter/derpmeter-cli)) | Only `~/.derpmeter/observed.json` (agent, model, time). That live Claude Code model wins while fresh, and votes are marked session-linked                                                                                                            |
 
 Model detection details:
 
@@ -58,6 +58,7 @@ Model detection details:
 - Claude aliases (`opus`, `sonnet`, `haiku`, `fable`, `opusplan`) map to the current catalog model of that family.
 - Without a `model` key, the agent uses its account default, which no file records, so pick a model yourself.
 - Antigravity's Claude and GPT models have DerpMeter-only `agy-*` ids, so pick them manually.
+- With _Auto_, a detected model the catalog does not list yet is sent with the vote as `unlistedModel` (the vote itself carries no model), so DerpMeter learns a new model is in use. Only a lowercase id with a version number; never a family name, path or free text, and nothing without the catalog. The server counts it per day and agent only, apart from the vote, with no client, token or network attached, and deletes the counts after 90 days.
 
 There is no process scanning, no transcript or screen access and no broad file access. Keychain reads never prompt or block startup. If an existing token can't be read, it is kept and the panel shows a notice instead of replacing it.
 

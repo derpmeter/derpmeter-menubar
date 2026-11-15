@@ -141,6 +141,19 @@ public enum LocalModelSettings {
         return matches.count == 1 ? matches[0] : nil
     }
 
+    /// A detected model the catalog does not list yet (same rules as the CLI):
+    /// a versioned id only, and only when the catalog was read.
+    public static func unlisted(_ raw: String?, agent: Agent, catalog: ModelCatalog?) -> String? {
+        guard let raw, let catalog, !catalog.models.isEmpty,
+              resolve(raw, agent: agent, catalog: catalog) == nil else { return nil }
+        var id = raw.lowercased()
+        if id.hasSuffix("[1m]") { id.removeLast(4) }
+        if let range = id.range(of: #"-\d{8}$"#, options: .regularExpression) { id.removeSubrange(range) }
+        guard id.range(of: #"^[a-z0-9][a-z0-9.-]{1,79}$"#, options: .regularExpression) != nil,
+              id.rangeOfCharacter(from: .decimalDigits) != nil else { return nil }
+        return id
+    }
+
     public static func configuredModel(for agent: Agent,
                                         environment: [String: String] = ProcessInfo.processInfo.environment) -> String? {
         let home = FileManager.default.homeDirectoryForCurrentUser

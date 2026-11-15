@@ -252,6 +252,13 @@ final class AppModel: ObservableObject {
         modelChoice(for: agent).resolve(detected: detectedModel(for: agent)?.raw, agent: agent, catalog: catalog)
     }
 
+    /// The detected model to report as unlisted: automatic choice only, when
+    /// the catalog has no match for it.
+    func unlistedModel(for agent: Agent) -> String? {
+        guard modelChoice(for: agent) == .auto else { return nil }
+        return LocalModelSettings.unlisted(detectedModel(for: agent)?.raw, agent: agent, catalog: catalog)
+    }
+
     /// Session-linked only when the vote's model really came from the observed session.
     private func sessionLinked(for agent: Agent, model: String?) -> Bool {
         guard detectConfiguredModels, modelChoice(for: agent) == .auto, let observed = session, observed.agent == agent else { return false }
@@ -300,7 +307,7 @@ final class AppModel: ObservableObject {
             return
         }
         let model = voteModel(for: agent)
-        let body = VoteBody(agent: agent, rating: rating, model: model, reason: reason, sessionLinked: sessionLinked(for: agent, model: model))
+        let body = VoteBody(agent: agent, rating: rating, model: model, unlistedModel: unlistedModel(for: agent), reason: reason, sessionLinked: sessionLinked(for: agent, model: model))
         do {
             try queue.enqueue(body, origin: client.origin.absoluteString, now: Date())
             persistQueue()
@@ -506,7 +513,7 @@ extension AppModel: SmashVoter {
         reloadSession()
         if let at = availableAt(agent) { return .limited(at) }
         let model = voteModel(for: agent)
-        let body = VoteBody(agent: agent, rating: rating, model: model, reason: nil, sessionLinked: sessionLinked(for: agent, model: model))
+        let body = VoteBody(agent: agent, rating: rating, model: model, unlistedModel: unlistedModel(for: agent), reason: nil, sessionLinked: sessionLinked(for: agent, model: model))
         let key = body.idempotencyKey
         do {
             try queue.enqueue(body, origin: client.origin.absoluteString, now: Date())
